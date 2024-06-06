@@ -23,7 +23,7 @@
 
 #if defined(ARDUINO_SAMD_MKRWIFI1010) || defined(ARDUINO_AVR_UNO_WIFI_REV2)
 #define SerialHCI Serial2
-#elif defined(ARDUINO_SAMD_NANO_33_IOT) || defined(ARDUINO_NANO_RP2040_CONNECT)
+#elif defined(ARDUINO_SAMD_NANO_33_IOT) || defined(ARDUINO_NANO_RP2040_CONNECT) || defined(VULINTUS_SAMD_BOARD_WITH_NINA_W102_MODULE)
 // SerialHCI is already defined in the variant
 #elif defined(ARDUINO_PORTENTA_H7_M4)
 // SerialHCI is already defined in the variant
