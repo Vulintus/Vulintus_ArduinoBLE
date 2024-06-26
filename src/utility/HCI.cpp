@@ -128,77 +128,103 @@ void HCIClass::poll()
 void HCIClass::poll(unsigned long timeout)
 {
 #ifdef ARDUINO_AVR_UNO_WIFI_REV2
-  digitalWrite(NINA_RTS, LOW);
+    digitalWrite(NINA_RTS, LOW);
 #endif
 
-  if (timeout) {
-    HCITransport.wait(timeout);
-  }
+    if (timeout) 
+    {
+        HCITransport.wait(timeout);
+    }
 
-  while (HCITransport.available()) {
-    byte b = HCITransport.read();
+    //Serial.println("HCITransport available() testing...");
+
+    while (HCITransport.available()) 
+    {
+        Serial.println("HCITransport available() TRUE");
+        byte b = HCITransport.read();
+        //Serial.write(b);
 	
-    if (_recvIndex >= sizeof(_recvBuffer)) {
-        _recvIndex = 0;
-        if (_debug) {
-            _debug->println("_recvBuffer overflow");
+        if (_recvIndex >= sizeof(_recvBuffer)) 
+        {
+            _recvIndex = 0;
+            if (_debug) 
+            {
+                _debug->println("_recvBuffer overflow");
+            }
+        }
+
+        _recvBuffer[_recvIndex++] = b;
+
+        if (_recvBuffer[0] == HCI_ACLDATA_PKT) 
+        {
+            if (_recvIndex > 5 && _recvIndex >= (5 + (_recvBuffer[3] + (_recvBuffer[4] << 8)))) 
+            {
+                if (_debug) 
+                {
+                    dumpPkt("HCI ACLDATA RX <- ", _recvIndex, _recvBuffer);
+                }
+
+#ifdef ARDUINO_AVR_UNO_WIFI_REV2
+                digitalWrite(NINA_RTS, HIGH);
+#endif
+
+                int pktLen = _recvIndex - 1;
+                _recvIndex = 0;
+
+                handleAclDataPkt(pktLen, &_recvBuffer[1]);
+
+#ifdef ARDUINO_AVR_UNO_WIFI_REV2
+                digitalWrite(NINA_RTS, LOW);  
+#endif
+
+            }
+        } 
+        else if (_recvBuffer[0] == HCI_EVENT_PKT) 
+        {
+            if (_recvIndex > 3 && _recvIndex >= (3 + _recvBuffer[2])) 
+            {
+                if (_debug) 
+                {
+                    dumpPkt("HCI EVENT RX <- ", _recvIndex, _recvBuffer);
+                }
+
+#ifdef ARDUINO_AVR_UNO_WIFI_REV2
+                digitalWrite(NINA_RTS, HIGH);
+#endif
+
+                // received full event
+                int pktLen = _recvIndex - 1;
+                _recvIndex = 0;
+
+                handleEventPkt(pktLen, &_recvBuffer[1]);
+
+#ifdef ARDUINO_AVR_UNO_WIFI_REV2
+                digitalWrite(NINA_RTS, LOW);
+#endif
+            }
+        } 
+        else 
+        {
+            _recvIndex = 0;
+
+            if (_debug) 
+            {
+                _debug->println(b, HEX);
+            }
         }
     }
 
-    _recvBuffer[_recvIndex++] = b;
-
-    if (_recvBuffer[0] == HCI_ACLDATA_PKT) {
-      if (_recvIndex > 5 && _recvIndex >= (5 + (_recvBuffer[3] + (_recvBuffer[4] << 8)))) {
-        if (_debug) {
-          dumpPkt("HCI ACLDATA RX <- ", _recvIndex, _recvBuffer);
-        }
-#ifdef ARDUINO_AVR_UNO_WIFI_REV2
-        digitalWrite(NINA_RTS, HIGH);
-#endif
-        int pktLen = _recvIndex - 1;
-        _recvIndex = 0;
-
-        handleAclDataPkt(pktLen, &_recvBuffer[1]);
+    //Serial.println("HCITransport available() FALSE");
 
 #ifdef ARDUINO_AVR_UNO_WIFI_REV2
-        digitalWrite(NINA_RTS, LOW);  
+    digitalWrite(NINA_RTS, HIGH);
 #endif
-      }
-    } else if (_recvBuffer[0] == HCI_EVENT_PKT) {
-      if (_recvIndex > 3 && _recvIndex >= (3 + _recvBuffer[2])) {
-        if (_debug) {
-          dumpPkt("HCI EVENT RX <- ", _recvIndex, _recvBuffer);
-        }
-#ifdef ARDUINO_AVR_UNO_WIFI_REV2
-        digitalWrite(NINA_RTS, HIGH);
-#endif
-        // received full event
-        int pktLen = _recvIndex - 1;
-        _recvIndex = 0;
 
-        handleEventPkt(pktLen, &_recvBuffer[1]);
-
-#ifdef ARDUINO_AVR_UNO_WIFI_REV2
-        digitalWrite(NINA_RTS, LOW);
-#endif
-      }
-    } else {
-      _recvIndex = 0;
-
-      if (_debug) {
-        _debug->println(b, HEX);
-      }
-    }
-  }
-
-#ifdef ARDUINO_AVR_UNO_WIFI_REV2
-  digitalWrite(NINA_RTS, HIGH);
-#endif
 }
 
 int HCIClass::reset()
 {
-  return sendCommand(OGF_HOST_CTL << 10 | OCF_RESET);
+    return sendCommand(OGF_HOST_CTL << 10 | OCF_RESET);
 }
 
 int HCIClass::readLocalVersion(uint8_t& hciVer, uint16_t& hciRev, uint8_t& lmpVer, uint16_t& manufacturer, uint16_t& lmpSubVer)
@@ -670,38 +696,48 @@ void HCIClass::noDebug()
 
 int HCIClass::sendCommand(uint16_t opcode, uint8_t plen, void* parameters)
 {
-  struct __attribute__ ((packed)) {
-    uint8_t pktType;
-    uint16_t opcode;
-    uint8_t plen;
-  } pktHdr = {HCI_COMMAND_PKT, opcode, plen};
+    struct __attribute__ ((packed)) 
+    {
+        uint8_t pktType;
+        uint16_t opcode;
+        uint8_t plen;
+    } pktHdr = {HCI_COMMAND_PKT, opcode, plen};
 
-  uint8_t txBuffer[sizeof(pktHdr) + plen];
-  memcpy(txBuffer, &pktHdr, sizeof(pktHdr));
-  memcpy(&txBuffer[sizeof(pktHdr)], parameters, plen);
+    uint8_t txBuffer[sizeof(pktHdr) + plen];
+    memcpy(txBuffer, &pktHdr, sizeof(pktHdr));
+    memcpy(&txBuffer[sizeof(pktHdr)], parameters, plen);
 
-  if (_debug) {
-    dumpPkt("HCI COMMAND TX -> ", sizeof(pktHdr) + plen, txBuffer);
-  }
+    if (_debug) 
+    {
+        dumpPkt("HCI COMMAND TX -> ", sizeof(pktHdr) + plen, txBuffer);
+    }
+
 #ifdef _BLE_TRACE_
-  Serial.print("Command tx -> ");
-  for(int i=0; i< sizeof(pktHdr) + plen;i++){
-    Serial.print(" 0x");
-    Serial.print(txBuffer[i],HEX);
-    
-  }
-  Serial.println("");
+    Serial.print("Command tx -> ");
+    for(int i=0; i< sizeof(pktHdr) + plen;i++)
+    {
+        Serial.print(" 0x");
+        Serial.print(txBuffer[i],HEX);
+    }
+    Serial.println("");
 #endif
-  HCITransport.write(txBuffer, sizeof(pktHdr) + plen);
 
-  _cmdCompleteOpcode = 0xffff;
-  _cmdCompleteStatus = -1;
+    //Serial.println("HCITransport write");
 
-  for (unsigned long start = millis(); _cmdCompleteOpcode != opcode && millis() < (start + 1000);) {
-    poll();
-  }
+    HCITransport.write(txBuffer, sizeof(pktHdr) + plen);
 
-  return _cmdCompleteStatus;
+    //Serial.println("HCITransport write finished");
+
+    _cmdCompleteOpcode = 0xffff;
+    _cmdCompleteStatus = -1;
+
+    for (unsigned long start = millis(); _cmdCompleteOpcode != opcode && millis() < (start + 1000);) 
+    {
+        //Serial.println("polling...");
+        poll();
+    }
+
+    return _cmdCompleteStatus;
 }
 
 void HCIClass::handleAclDataPkt(uint8_t /*plen*/, uint8_t pdata[])

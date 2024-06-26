@@ -50,185 +50,89 @@ BLELocalDevice::~BLELocalDevice()
 
 int BLELocalDevice::begin()
 {
-#if defined(ARDUINO_SAMD_MKRWIFI1010) || defined(ARDUINO_AVR_UNO_WIFI_REV2) || defined(ARDUINO_SAMD_NANO_33_IOT) || defined(ARDUINO_NANO_RP2040_CONNECT) || defined(VULINTUS_SAMD_BOARD_WITH_NINA_W102_MODULE)
-  // reset the NINA in BLE mode
-  pinMode(SPIWIFI_SS, OUTPUT);
-  pinMode(NINA_RESETN, OUTPUT);
-  
-  digitalWrite(SPIWIFI_SS, LOW);
-#endif
+    // reset the NINA in BLE mode
+    pinMode(SPIWIFI_SS, OUTPUT);
+    pinMode(NINA_RESETN, OUTPUT);
 
-#if defined(ARDUINO_SAMD_MKRWIFI1010) || defined(ARDUINO_AVR_UNO_WIFI_REV2)
-  digitalWrite(NINA_RESETN, HIGH);
-  delay(100);
-  digitalWrite(NINA_RESETN, LOW);
-  delay(750);
-#elif defined(ARDUINO_SAMD_NANO_33_IOT) || defined(ARDUINO_NANO_RP2040_CONNECT) || defined(VULINTUS_SAMD_BOARD_WITH_NINA_W102_MODULE)
-  // inverted reset
-  digitalWrite(NINA_RESETN, LOW);
-  delay(100);
-  digitalWrite(NINA_RESETN, HIGH);
-  delay(750);
-#elif defined(PORTENTA_H7_PINS) || defined(ARDUINO_PORTENTA_H7_M7) || defined(ARDUINO_NICLA_VISION) || defined(ARDUINO_GIGA) || defined(ARDUINO_OPTA)
-  // BT_REG_ON -> HIGH
-  pinMode(BT_REG_ON, OUTPUT);
-  digitalWrite(BT_REG_ON, LOW);
-  delay(500);
-  digitalWrite(BT_REG_ON, HIGH);
-  delay(500);
-#elif defined(ARDUINO_PORTENTA_C33)
-#define NINA_GPIO0      (100)
-#define NINA_RESETN     (101)
-  pinMode(NINA_GPIO0, OUTPUT);
-  pinMode(NINA_RESETN, OUTPUT);
-  Serial5.begin(921600);
+    digitalWrite(SPIWIFI_SS, LOW);
+    delay(5);
 
-  digitalWrite(NINA_GPIO0, HIGH);
-  delay(100);
-  digitalWrite(NINA_RESETN, HIGH);
-  digitalWrite(NINA_RESETN, LOW);
-  digitalWrite(NINA_RESETN, HIGH);
-  auto _start = millis();
-  while (millis() - _start < 500) {
-    if (Serial5.available()) {
-      Serial5.read();
-    }
-  }
-  //pinMode(94, OUTPUT);
-  //digitalWrite(94, LOW);
-#endif
+    // inverted reset
+    digitalWrite(NINA_RESETN, LOW);
+    delay(100);
+    digitalWrite(NINA_RESETN, HIGH);
+    delay(750);
 
-
-#ifdef ARDUINO_AVR_UNO_WIFI_REV2
-  // set SS HIGH
-  digitalWrite(SPIWIFI_SS, HIGH);
-
-  // set RTS HIGH
-  pinMode(NINA_RTS, OUTPUT);
-  digitalWrite(NINA_RTS, HIGH);
-
-  // set CTS as input
-  pinMode(NINA_CTS, INPUT);
-#endif
-
-#if defined(ARDUINO_SAMD_NANO_33_IOT) || defined(VULINTUS_SAMD_BOARD_WITH_NINA_W102_MODULE)
     // set SS HIGH
     digitalWrite(SPIWIFI_SS, HIGH);
-#endif
 
-  if (!HCI.begin()) {
-    end();
-    return 0;
-  }
+    if (!HCI.begin()) 
+    {
+        end();
+        return 0;
+    }
 
-  delay(100);
+    delay(100);
 
-  if (HCI.reset() != 0) {
-    end();
+    if (HCI.reset() != 0) 
+    {
+        Serial.println("HCI reset failed!");
+        end();
+        return 0;
+    }
 
-    return 0;
-  }
+    uint8_t hciVer;
+    uint16_t hciRev;
+    uint8_t lmpVer;
+    uint16_t manufacturer;
+    uint16_t lmpSubVer;
 
-  uint8_t hciVer;
-  uint16_t hciRev;
-  uint8_t lmpVer;
-  uint16_t manufacturer;
-  uint16_t lmpSubVer;
+    if (HCI.readLocalVersion(hciVer, hciRev, lmpVer, manufacturer, lmpSubVer) != 0) 
+    {
+        end();
+        return 0;
+    }
 
-  if (HCI.readLocalVersion(hciVer, hciRev, lmpVer, manufacturer, lmpSubVer) != 0) {
-    end();
-    return 0;
-  }
+    if (HCI.setEventMask(0x3FFFFFFFFFFFFFFF) != 0) 
+    {
+        end();
+        return 0;
+    }
 
-  if (HCI.setEventMask(0x3FFFFFFFFFFFFFFF) != 0) {
-    end();
-    return 0;
-  }
-  if (HCI.setLeEventMask(0x00000000000003FF) != 0) {
-    end();
-    return 0;
-  }
+    if (HCI.setLeEventMask(0x00000000000003FF) != 0) 
+    {
+        end();
+        return 0;
+    }
 
-  uint16_t pktLen;
-  uint8_t maxPkt;
+    uint16_t pktLen;
+    uint8_t maxPkt;
 
-  if (HCI.readLeBufferSize(pktLen, maxPkt) != 0) {
-    end();
-    return 0;
-  }
+    if (HCI.readLeBufferSize(pktLen, maxPkt) != 0) 
+    {
+        end();
+        return 0;
+    }
 
-  /// The HCI should allow automatic address resolution.
+    GATT.begin();
 
-  // // If we have callbacks to remember bonded devices:
-  // if(HCI._getIRKs!=0){
-  //   uint8_t nIRKs = 0;
-  //   uint8_t** BADDR_Type = new uint8_t*;
-  //   uint8_t*** BADDRs = new uint8_t**;
-  //   uint8_t*** IRKs = new uint8_t**;
-  //   uint8_t* memcheck;
-
-
-  //   if(!HCI._getIRKs(&nIRKs, BADDR_Type, BADDRs, IRKs)){
-  //     Serial.println("error");
-  //   }
-  //   for(int i=0; i<nIRKs; i++){
-  //     Serial.print("Baddr type: ");
-  //     Serial.println((*BADDR_Type)[i]);
-  //     Serial.print("BADDR:");
-  //     for(int k=0; k<6; k++){
-  //       Serial.print(", 0x");
-  //       Serial.print((*BADDRs)[i][k],HEX);
-  //     }
-  //     Serial.println();
-  //     Serial.print("IRK:");
-  //     for(int k=0; k<16; k++){
-  //       Serial.print(", 0x");
-  //       Serial.print((*IRKs)[i][k],HEX);
-  //     }
-  //     Serial.println();
-
-  //     // save this 
-  //     uint8_t zeros[16];
-  //     for(int k=0; k<16; k++) zeros[15-k] = 0;
-      
-  //     // HCI.leAddResolvingAddress((*BADDR_Type)[i],(*BADDRs)[i],(*IRKs)[i], zeros);
-
-  //     delete[] (*BADDRs)[i];
-  //     delete[] (*IRKs)[i];
-  //   }
-  //   delete[] (*BADDR_Type);
-  //   delete BADDR_Type;
-  //   delete[] (*BADDRs);
-  //   delete BADDRs;
-  //   delete[] (*IRKs);
-  //   delete IRKs;
-    
-  //   memcheck = new uint8_t[1];
-  //   Serial.print("nIRK location: 0x");
-  //   Serial.println((int)memcheck,HEX);
-  //   delete[] memcheck;
-
-  // }
-
-  GATT.begin();
-
-  return 1;
+    return 1;
 }
 
 void BLELocalDevice::end()
 {
-  GATT.end();
+    GATT.end();
 
-  HCI.end();
+    HCI.end();
 
 #if defined(ARDUINO_SAMD_MKRWIFI1010) || defined(ARDUINO_AVR_UNO_WIFI_REV2)
-  // disable the NINA
-  digitalWrite(NINA_RESETN, HIGH);
+    // disable the NINA
+    digitalWrite(NINA_RESETN, HIGH);
 #elif defined(ARDUINO_SAMD_NANO_33_IOT) || defined(ARDUINO_NANO_RP2040_CONNECT) || defined(VULINTUS_SAMD_BOARD_WITH_NINA_W102_MODULE)
-  // disable the NINA
-  digitalWrite(NINA_RESETN, LOW);
+    // disable the NINA
+    digitalWrite(NINA_RESETN, LOW);
 #elif defined(ARDUINO_PORTENTA_H7_M4) || defined(ARDUINO_PORTENTA_H7_M7) || defined(ARDUINO_NICLA_VISION) || defined(ARDUINO_GIGA) || defined(ARDUINO_OPTA)
-  digitalWrite(BT_REG_ON, LOW);
+    digitalWrite(BT_REG_ON, LOW);
 #endif
 }
 
