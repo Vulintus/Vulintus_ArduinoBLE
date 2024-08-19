@@ -76,7 +76,6 @@ int BLELocalDevice::begin()
 
     if (HCI.reset() != 0) 
     {
-        Serial.println("HCI reset failed!");
         end();
         return 0;
     }

@@ -136,13 +136,9 @@ void HCIClass::poll(unsigned long timeout)
         HCITransport.wait(timeout);
     }
 
-    //Serial.println("HCITransport available() testing...");
-
     while (HCITransport.available()) 
     {
-        Serial.println("HCITransport available() TRUE");
         byte b = HCITransport.read();
-        //Serial.write(b);
 	
         if (_recvIndex >= sizeof(_recvBuffer)) 
         {
@@ -213,8 +209,6 @@ void HCIClass::poll(unsigned long timeout)
             }
         }
     }
-
-    //Serial.println("HCITransport available() FALSE");
 
 #ifdef ARDUINO_AVR_UNO_WIFI_REV2
     digitalWrite(NINA_RTS, HIGH);
@@ -722,18 +716,13 @@ int HCIClass::sendCommand(uint16_t opcode, uint8_t plen, void* parameters)
     Serial.println("");
 #endif
 
-    //Serial.println("HCITransport write");
-
     HCITransport.write(txBuffer, sizeof(pktHdr) + plen);
-
-    //Serial.println("HCITransport write finished");
 
     _cmdCompleteOpcode = 0xffff;
     _cmdCompleteStatus = -1;
 
     for (unsigned long start = millis(); _cmdCompleteOpcode != opcode && millis() < (start + 1000);) 
     {
-        //Serial.println("polling...");
         poll();
     }
 
