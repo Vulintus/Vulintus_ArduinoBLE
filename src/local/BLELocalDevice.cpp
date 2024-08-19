@@ -111,11 +111,6 @@ int BLELocalDevice::begin()
   pinMode(NINA_CTS, INPUT);
 #endif
 
-#if defined(ARDUINO_SAMD_NANO_33_IOT) || defined(VULINTUS_SAMD_BOARD_WITH_NINA_W102_MODULE)
-    // set SS HIGH
-    digitalWrite(SPIWIFI_SS, HIGH);
-#endif
-
   if (!HCI.begin()) {
     end();
     return 0;
